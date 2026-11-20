@@ -83,9 +83,13 @@ vi.mock(import("../../state/use-atom-command"), async (original) => ({
     })[command.label ?? ""] ?? vi.fn()) as never,
 }));
 vi.mock(import("~/localApi"), async (original) => {
-  const api = { dialogs: { confirm: state.confirm } };
+  const actual = await original();
+  const api = {
+    ...actual.createLocalApi(),
+    dialogs: { confirm: state.confirm },
+  };
   return {
-    ...(await original()),
+    ...actual,
     readLocalApi: (() => api) as never,
     ensureLocalApi: (() => api) as never,
   };
@@ -250,6 +254,46 @@ async function setup() {
 }
 
 describe("EnvironmentProviderSettings routing", () => {
+  it("confirms removal of a disabled default provider from its context menu", async () => {
+    await setup();
+    const instanceId = ProviderInstanceId.make("claudeAgent");
+    const driver = ProviderDriverKind.make("claudeAgent");
+    state.settings = {
+      ...DEFAULT_UNIFIED_SETTINGS,
+      providerInstances: {
+        [instanceId]: { driver, displayName: "Claude Team", enabled: false },
+      },
+    };
+
+    await using screen = await render(panel());
+    const row = screen.getByRole("button", { name: "Select Claude Team" });
+    const remove = page.getByRole("menuitem", { name: "Remove provider", exact: true });
+    await userEvent.click(row, { button: "right" });
+    await userEvent.click(remove);
+    expect(state.confirm).toHaveBeenCalledWith(
+      expect.stringContaining("Remove the Claude Team provider instance?"),
+      { variant: "destructive" },
+    );
+    expect(state.mutateProviderInstance).not.toHaveBeenCalled();
+
+    state.confirm.mockResolvedValue(true);
+    await userEvent.click(row, { button: "right" });
+    await userEvent.click(remove);
+    expect(state.mutateProviderInstance).toHaveBeenCalledWith({
+      operation: "removeDefault",
+      instanceId,
+    });
+
+    state.settings = {
+      ...DEFAULT_UNIFIED_SETTINGS,
+      providerInstances: { [instanceId]: { driver, enabled: false, removed: true } },
+    };
+    await screen.rerender(panel());
+    await expect
+      .element(screen.getByRole("button", { name: "Select Claude", exact: true }))
+      .not.toBeInTheDocument();
+  });
+
   it("does not substitute another account when the requested instance was removed", async () => {
     await setup();
     await setProviders([provider()]);

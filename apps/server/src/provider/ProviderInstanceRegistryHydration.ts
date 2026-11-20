@@ -55,12 +55,15 @@ type ProviderInstanceRegistryHydrationEnv =
 export const deriveProviderInstanceConfigMap = (
   settings: ServerSettings,
 ): ProviderInstanceConfigMap => {
-  const merged: Record<string, ProviderInstanceConfig> = { ...settings.providerInstances };
+  const merged: Record<string, ProviderInstanceConfig> = {};
+  for (const [instanceId, instance] of Object.entries(settings.providerInstances)) {
+    if (!instance.removed) merged[instanceId] = instance;
+  }
 
   for (const driver of BUILT_IN_DRIVERS) {
     if (driver.metadata.hasDefaultInstance === false) continue;
     const instanceId = defaultInstanceIdForDriver(driver.driverKind);
-    if (instanceId in merged) continue;
+    if (Object.hasOwn(settings.providerInstances, instanceId)) continue;
     merged[instanceId] = { driver: driver.driverKind };
   }
 

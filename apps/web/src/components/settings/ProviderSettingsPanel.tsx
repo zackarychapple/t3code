@@ -748,6 +748,7 @@ export function EnvironmentProviderSettings({
     Array<[ProviderInstanceId, ProviderInstanceConfig]>
   >();
   for (const [rawId, instance] of Object.entries(settings.providerInstances ?? {})) {
+    if (instance.removed) continue;
     const driver = instance.driver;
     const list = instancesByDriver.get(driver) ?? [];
     list.push([rawId as ProviderInstanceId, instance]);
@@ -773,6 +774,7 @@ export function EnvironmentProviderSettings({
     const hasDefaultSlot = providerSettings.hasDefaultInstance || explicitInstance !== undefined;
     if (
       hasDefaultSlot &&
+      !explicitInstance?.removed &&
       (driver === "codex" ||
         driver === "claudeAgent" ||
         isDirty ||
@@ -873,15 +875,22 @@ export function EnvironmentProviderSettings({
   );
 
   const deleteInstance = useStableCallback(
-    async (instanceId: ProviderInstanceId, instance: ProviderInstanceConfig) => {
+    async (
+      instanceId: ProviderInstanceId,
+      instance: ProviderInstanceConfig,
+      isDefault: boolean,
+    ) => {
       const confirmed = await confirmProviderInstanceRemoval(
         gt("Remove the {provider} provider instance?", {
           provider: providerInstanceName(instance),
         }),
       );
       if (!confirmed) return;
+      const hasDefaultInstance =
+        isDefault &&
+        providerClients.get(ProviderDriverKind.make(instanceId))?.hasDefaultInstance !== false;
       const updateResult = await persistProviderInstance({
-        operation: "remove",
+        operation: hasDefaultInstance ? "removeDefault" : "remove",
         instanceId,
       });
       if (updateResult._tag === "Failure") {
@@ -1273,6 +1282,7 @@ interface ProviderInstanceRowActions {
   readonly deleteInstance: (
     instanceId: ProviderInstanceId,
     instance: ProviderInstanceConfig,
+    isDefault: boolean,
   ) => Promise<void>;
   readonly resetDefaultInstance: (driverKind: ProviderDriverKind) => Promise<void>;
   readonly writeProjectOverride: (
@@ -1457,8 +1467,8 @@ function ProviderInstanceRow({
       }
       onUpdate={(next) => actions.updateInstance(instanceId, instance, next)}
       onDelete={
-        mode === "editor" && !isDefault
-          ? () => actions.deleteInstance(instanceId, instance)
+        mode === "list" || !isDefault
+          ? () => actions.deleteInstance(instanceId, instance, isDefault)
           : undefined
       }
       headerAction={

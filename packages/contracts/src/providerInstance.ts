@@ -78,6 +78,8 @@ export const ProviderInstanceConfig = Schema.Struct({
   accentColor: Schema.optional(TrimmedNonEmptyString),
   environment: Schema.optionalKey(ProviderInstanceEnvironment),
   enabled: Schema.optionalKey(Schema.Boolean),
+  /** Keep the registry from recreating a removed default instance. */
+  removed: Schema.optionalKey(Schema.Literal(true)),
   config: Schema.optionalKey(Schema.Unknown),
 });
 export type ProviderInstanceConfig = typeof ProviderInstanceConfig.Type;
@@ -95,6 +97,10 @@ export const ProviderInstanceMutation = Schema.Union([
   }),
   Schema.Struct({
     operation: Schema.Literal("remove"),
+    instanceId: ProviderInstanceId,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("removeDefault"),
     instanceId: ProviderInstanceId,
   }),
 ]);

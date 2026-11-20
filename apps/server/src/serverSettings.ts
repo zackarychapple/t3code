@@ -56,6 +56,7 @@ import {
 } from "@t3tools/shared/serverSettings";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
 import * as ManagedPolicy from "./policy/ManagedPolicy.ts";
+import { BUILT_IN_DRIVERS } from "./provider/builtInDrivers.ts";
 import { secretProviderDefinitions } from "./secrets/secretProviderDefinitions.ts";
 import { watchDirectoryReplacements } from "./watchDirectoryReplacements.ts";
 import {
@@ -190,7 +191,13 @@ export function applyProviderInstanceMutation(
   mutation: ProviderInstanceMutation,
 ): ServerSettings {
   const providerInstances = { ...settings.providerInstances };
-  if (mutation.operation === "upsert" || mutation.operation === "create") {
+  if (mutation.operation === "removeDefault") {
+    providerInstances[mutation.instanceId] = {
+      driver: ProviderDriverKind.make(mutation.instanceId),
+      enabled: false,
+      removed: true,
+    };
+  } else if (mutation.operation === "upsert" || mutation.operation === "create") {
     providerInstances[mutation.instanceId] = mutation.instance;
   } else {
     delete providerInstances[mutation.instanceId];
@@ -237,6 +244,22 @@ function ensureProviderInstanceMutationAllowed(
   mutation: ProviderInstanceMutation,
   settingsPath: string,
 ): Effect.Effect<void, ServerSettingsError> {
+  if (
+    mutation.operation === "removeDefault" &&
+    !BUILT_IN_DRIVERS.some(
+      ({ driverKind, metadata }) =>
+        metadata.hasDefaultInstance !== false &&
+        defaultInstanceIdForDriver(driverKind) === mutation.instanceId,
+    )
+  ) {
+    return Effect.fail(
+      new ServerSettingsError({
+        settingsPath,
+        operation: "remove-default-provider-instance",
+        providerInstanceId: mutation.instanceId,
+      }),
+    );
+  }
   if (
     mutation.operation === "create" &&
     Object.hasOwn(settings.providerInstances, mutation.instanceId)

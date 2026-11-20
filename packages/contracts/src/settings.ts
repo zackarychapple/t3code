@@ -1650,14 +1650,15 @@ export const resolveProjectProviderInstanceEnabled = (
   projectId: ProjectId | null,
   instanceId: ProviderInstanceId,
 ): boolean => {
+  const instanceConfig = Object.hasOwn(settings.providerInstances, instanceId)
+    ? settings.providerInstances[instanceId]
+    : undefined;
+  if (instanceConfig?.removed) return false;
   const override =
     projectId === null
       ? undefined
       : settings.projectSettingsOverrides[projectId]?.providerInstances?.[instanceId]?.enabled;
   if (override !== undefined) return override;
-  const instanceConfig = Object.hasOwn(settings.providerInstances, instanceId)
-    ? settings.providerInstances[instanceId]
-    : undefined;
   return instanceConfig !== undefined
     ? resolveProviderInstanceEnabled(instanceConfig)
     : isUnconfiguredDefaultInstanceEnabled(instanceId);
@@ -1737,6 +1738,7 @@ export const ServerSettingsOperation = Schema.Literals([
   "normalize",
   "check-exists",
   "create-provider-instance",
+  "remove-default-provider-instance",
   "read-file",
   "read-provider-history",
   "read-project-settings",
