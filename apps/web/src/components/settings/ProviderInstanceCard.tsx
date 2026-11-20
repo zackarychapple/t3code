@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
-import { Fragment, useState, type ReactElement, type ReactNode } from "react";
+import { Fragment, useState, type MouseEvent, type ReactElement, type ReactNode } from "react";
 import { T, useGT, useMessages, Var } from "gt-react";
 import {
   isProviderDriverKind,
@@ -41,6 +41,7 @@ import {
 import { cn } from "../../lib/utils";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { useStableCallback } from "../../hooks/useStableCallback";
+import { readLocalApi } from "~/localApi";
 import { normalizeProviderAccentColor } from "../../providerInstances";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -714,7 +715,7 @@ interface ProviderInstanceCardProps {
   readonly readOnly?: boolean | undefined;
   readonly canWriteSettings?: boolean;
   readonly onUpdate: (nextInstance: ProviderInstanceConfig) => Promise<boolean>;
-  readonly onDelete?: (() => void) | undefined;
+  readonly onDelete?: (() => Promise<void>) | undefined;
   readonly headerAction?: ReactNode | undefined;
   readonly setup?: ReactNode;
   readonly runtime?: ReactNode;
@@ -1170,10 +1171,31 @@ export function ProviderInstanceCard({
     </Popover>
   ) : null;
 
+  const showRemovalMenu = async (event: MouseEvent<HTMLDivElement>) => {
+    const api = readLocalApi();
+    if (!api || !onDelete) return;
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      const action = await api.contextMenu.show(
+        [{ id: "remove", label: gt("Remove provider"), icon: "trash", destructive: true }],
+        { x: event.clientX, y: event.clientY },
+      );
+      if (action === "remove") await onDelete();
+    } catch (error) {
+      toastManager.add({
+        type: "error",
+        title: gt("Could not remove provider"),
+        description: error instanceof Error ? error.message : gt("The removal failed."),
+      });
+    }
+  };
+
   if (mode === "list") {
     return (
       <div
         data-slot="settings-row"
+        onContextMenu={onDelete && !readOnly ? showRemovalMenu : undefined}
         className={cn(
           "group relative flex min-h-18 items-center gap-3 px-3 py-3 transition-colors sm:px-4",
           selected ? "bg-foreground/[0.06]" : "hover:bg-muted/25",

@@ -556,6 +556,48 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
     }).pipe(Effect.provide(layerServerSettings())),
   );
 
+  it.effect("keeps a removed default provider out of the registry after loading settings", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
+      const serverConfig = yield* ServerConfig.ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const instanceId = ProviderInstanceId.make("claudeAgent");
+      const customId = ProviderInstanceId.make("claude_work");
+      const driver = ProviderDriverKind.make("claudeAgent");
+      const customInstance = { driver, enabled: true };
+      yield* serverSettings.updateSettings({
+        providerInstances: {
+          [instanceId]: {
+            driver,
+            displayName: "Claude Team",
+            enabled: false,
+            config: { binaryPath: "/opt/claude-team" },
+          },
+          [customId]: customInstance,
+        },
+      });
+
+      yield* serverSettings.updateProviderInstance({ operation: "removeDefault", instanceId });
+      const error = yield* serverSettings
+        .updateProviderInstance({ operation: "removeDefault", instanceId: customId })
+        .pipe(Effect.flip);
+      assert.equal(error.operation, "remove-default-provider-instance");
+
+      const persisted = yield* decodeServerSettingsJson(
+        yield* fileSystem.readFileString(serverConfig.settingsPath),
+      );
+      const instances = deriveProviderInstanceConfigMap(persisted);
+
+      assert.deepEqual(persisted.providerInstances[instanceId], {
+        driver,
+        enabled: false,
+        removed: true,
+      });
+      assert.isUndefined(instances[instanceId]);
+      assert.deepEqual(instances[customId], customInstance);
+    }).pipe(Effect.provide(layerServerSettings())),
+  );
+
   it.effect("pauses provider-instance mutations while a settings snapshot is in use", () =>
     Effect.gen(function* () {
       const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
