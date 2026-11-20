@@ -360,6 +360,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
           {modelRow}
           {fallbackRow}
           {workspaceRow}
+          <WorktreeSubmodulesRow />
         </>
       ) : category === "general" ? (
         <>
